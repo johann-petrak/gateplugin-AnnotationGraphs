@@ -45,9 +45,14 @@ ag.removeEdgeName("members");
 
 2) Edge oriented 
 
-ag.addEdge(fromAnn,toAnn,edgename) 
-ag.removeEdge(fromAnn,toAnn,edgename)
-ag.hasEdge(fromAnn,toAnn,edgename)
+ag.setDefaultEdge(edgeName)
+ag.addEdge(edgename,fromAnn,toAnn) 
+ag.addEdge(edgename,fromAnn,Annotation... toAnns)
+ag.addEdge(edgename,fromAnn,Collection<Annotation> toAnns)
+ag.removeEdge(edgename,fromAnn,toAnn)
+ag.removeEdges(edgename,fromAnn) // remove all edges to other anns
+ag.removeReferencingEdges(edgename,toAnn) // remove all edges from other anns to this ann
+ag.hasEdge(edgename,fromAnn,toAnn)
 
 ag.addBothEdges(ann1,ann2,edgename)
 
@@ -63,6 +68,25 @@ Iterator<Annotation> annIt = ag.getReferencingAnnotationsIterator(toAnn,edgename
 ag.sortEdges(fromAnn,edgename,Comparator<Annotation>)
 ag.sortEdges(fromAnn,edgename,Comparator<FeatureMap>)
 
+Functionality related to Relation/RelationSet implementation
+============================================================
+
+Generally, relations are represented by annotations or just 
+by an edge between annotations.
+
+Roughly:
+
+Creating a relation:
+RelationSet.addRelation(type,int... members) is the same 
+as creating an annotation and make it point to members.
+
+RelationSet.deleteRelation(Relation) 
+
+RelationSet.getMaximumArity(): why is this even needed. Will not 
+be supported.
+
+RelationSet.getReferencing(id): same as getReferencingAnnotations(ann)
+RelationSet.getRelations(int... members): ????
 
 NOTE: equivalent implementation of LodieUtils methods
 ===================================================== 
