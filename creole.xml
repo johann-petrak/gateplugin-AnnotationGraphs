@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<CREOLE-DIRECTORY 
+  ID="gate.plugins.annotationgraphs" 
+  VERSION="0.1" 
+  DESCRIPTION="Support for Graphs of Interconnected Annotations"
+  HELPURL="http://github.com/johann-petrak/gateplugin-AnnotationGraphs/wiki"
+>
+  <JAR scan="true">AnnotationGraphs.jar</JAR>
+</CREOLE-DIRECTORY>
