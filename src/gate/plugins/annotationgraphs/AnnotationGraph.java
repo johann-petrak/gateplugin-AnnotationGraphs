@@ -48,12 +48,14 @@ public class AnnotationGraph
   protected HashMap<String,String> fromEdgeNames;
 
   
-  public AnnotationGraph(Document doc, String setName) {
+  public AnnotationGraph(Document doc, AnnotationSet set) {
     this.doc = doc;
-    this.set = doc.getAnnotations(setName);
-    this.setName = setName;
+    if(!set.getDocument().equals(doc)) {
+      throw new GateRuntimeException("AnnotationSet is not from the given document!");
+    }
+    this.set = set;
     this.docName = doc.getName();
-    // TODO: initialize any known edge names and other info from the document features!
+    this.setName = set.getName();
     List<String> edgeList = (List<String>)doc.getFeatures().get(AG_DFN_EDGES);
     edgeSet = new HashSet<String>();
     if(edgeList != null) {
@@ -76,8 +78,8 @@ public class AnnotationGraph
     isActive = true;
   }
   
-  public static AnnotationGraph getAnnotationGraph(Document doc, String setName) {
-    return new AnnotationGraph(doc,setName);
+  public static AnnotationGraph getAnnotationGraph(Document doc, AnnotationSet set) {
+    return new AnnotationGraph(doc,set);
   }
   
   //////////////////////////////
@@ -137,6 +139,8 @@ public class AnnotationGraph
   
   public void addEdge(String edgeName, Annotation from, Annotation to) {
     ensureActive();
+    ensureAnnotation(from);
+    ensureAnnotation(to);
     List<Integer> ids = getToEdgesList(edgeName, from);
     ids.add(to.getId());
     ids = getFromEdgesList(edgeName,to);
@@ -162,6 +166,8 @@ public class AnnotationGraph
   
   public void removeEdge(String edgeName, Annotation from, Annotation to) {
     ensureActive();
+    ensureAnnotation(from);
+    ensureAnnotation(to);
     List<Integer> ids = getToEdgesList(edgeName, from);
     boolean done = ids.remove(to.getId());
     if(!done) {
@@ -182,6 +188,9 @@ public class AnnotationGraph
   }
   
   public boolean hasEdge(String edgeName, Annotation from, Annotation to) {
+    ensureActive();
+    ensureAnnotation(from);
+    ensureAnnotation(to);
     List<Integer> ids = getToEdges(edgeName, from);
     if(ids == null) {
       return false;
@@ -204,6 +213,8 @@ public class AnnotationGraph
    * @return 
    */
   public boolean hasEdges(String edgeName, Annotation ann) {
+    ensureActive();
+    ensureAnnotation(ann);
     List<Integer> ids = getToEdges(edgeName,ann);
     if(ids != null && !ids.isEmpty()) {
       return true;
@@ -218,6 +229,8 @@ public class AnnotationGraph
   }
   
   public boolean hasReferencingEdges(String edgeName, Annotation ann) {
+    ensureActive();
+    ensureAnnotation(ann);
     List<Integer> ids = getFromEdges(edgeName,ann);
     if(ids != null && !ids.isEmpty()) {
       return true;
@@ -228,6 +241,7 @@ public class AnnotationGraph
   
   public void removeEdges(String edgeName, Annotation ann) {
     ensureActive();
+    ensureAnnotation(ann);
     List<Integer> ids = getToEdges(edgeName,ann);
     int thisId = ann.getId();
     if(ids != null) {
@@ -254,13 +268,13 @@ public class AnnotationGraph
   
   public List<Annotation> getAnnotations(String edgeName, Annotation ann) {
     ensureActive();
+    ensureAnnotation(ann);
     List<Integer> ids = getToEdges(edgeName, ann);
     List<Annotation> ret = new ArrayList<Annotation>();
     if(ids == null) {
       return ret;
     }
     for(Integer id : ids) {
-      // TODO: maybe check if the annotation really exists?
       ret.add(set.get(id));
     }
     return ret;
@@ -274,13 +288,13 @@ public class AnnotationGraph
   
   public List<Annotation> getReferencingAnnotations(String edgeName, Annotation ann) {
     ensureActive();
+    ensureAnnotation(ann);
     List<Integer> ids = getFromEdges(edgeName, ann);
     List<Annotation> ret = new ArrayList<Annotation>();
     if(ids == null) {
       return ret;
     }
     for(Integer id : ids) {
-      // TODO: maybe check if the annotation really exists?
       ret.add(set.get(id));
     }
     return ret;
@@ -294,13 +308,13 @@ public class AnnotationGraph
   
   public AnnotationSet getAnnotationSet(String edgeName, Annotation ann) {
     ensureActive();
+    ensureAnnotation(ann);
     List<Integer> ids = getToEdges(edgeName, ann);
     AnnotationSet ret = new AnnotationSetImpl(doc);
     if(ids == null) {
       return ret;
     }
     for(Integer id : ids) {
-      // TODO: maybe check if the annotation really exists?
       ret.add(set.get(id));
     }
     return ret;
@@ -313,13 +327,13 @@ public class AnnotationGraph
 
   public AnnotationSet getReferencingAnnotationSet(String edgeName, Annotation ann) {
     ensureActive();
+    ensureAnnotation(ann);
     List<Integer> ids = getFromEdges(edgeName, ann);
     AnnotationSet ret = new AnnotationSetImpl(doc);
     if(ids == null) {
       return ret;
     }
     for(Integer id : ids) {
-      // TODO: maybe check if the annotation really exists?
       ret.add(set.get(id));
     }
     return ret;
@@ -332,13 +346,13 @@ public class AnnotationGraph
   
   public List<FeatureMap> getFeatureMaps(String edgeName, Annotation ann) {
     ensureActive();
+    ensureAnnotation(ann);
     List<Integer> ids = getToEdges(edgeName, ann);
     List<FeatureMap> ret = new ArrayList<FeatureMap>();
     if(ids == null) {
       return ret;
     }
     for(Integer id : ids) {
-      // TODO: maybe check if the annotation really exists?
       ret.add(set.get(id).getFeatures());
     }
     return ret;    
@@ -351,13 +365,13 @@ public class AnnotationGraph
   
   public List<FeatureMap> getReferencingFeatureMaps(String edgeName, Annotation ann) {
     ensureActive();
+    ensureAnnotation(ann);
     List<Integer> ids = getToEdges(edgeName, ann);
     List<FeatureMap> ret = new ArrayList<FeatureMap>();
     if(ids == null) {
       return ret;
     }
     for(Integer id : ids) {
-      // TODO: maybe check if the annotation really exists?
       ret.add(set.get(id).getFeatures());
     }
     return ret;    
@@ -381,6 +395,7 @@ public class AnnotationGraph
    */
   public List<Integer> getIds(String edgeName, Annotation ann) {
     ensureActive();
+    ensureAnnotation(ann);
     List<Integer> ids = getToEdgesList(edgeName, ann);
     return Collections.unmodifiableList(ids);
   }
@@ -392,6 +407,7 @@ public class AnnotationGraph
   
   public List<Integer> getReferencingIds(String edgeName, Annotation ann) {
     ensureActive();
+    ensureAnnotation(ann);
     List<Integer> ids = getFromEdgesList(edgeName, ann);
     return Collections.unmodifiableList(ids);    
   }
@@ -404,6 +420,7 @@ public class AnnotationGraph
   
   public AnnotationSet getTransitiveAnnotationSet(String edgeName, Annotation ann) {
     ensureActive();
+    ensureAnnotation(ann);
     AnnotationSet ret = new AnnotationSetImpl(doc);
     List<Integer> ids = getToEdges(edgeName, ann);
     if(ids != null) {
@@ -423,6 +440,37 @@ public class AnnotationGraph
       }
     }
     return ret;
+  }
+  
+  /**
+   * Return the set of all transitive annotations for all known edge names.
+   * @param ann
+   * @return 
+   */
+  public AnnotationSet getFullTransitiveAnnotationSet(Annotation ann) {
+    ensureActive();
+    ensureAnnotation(ann);
+    AnnotationSet ret = new AnnotationSetImpl(doc);
+    for (String edgeName : edgeSet) {
+      List<Integer> ids = getToEdges(edgeName, ann);
+      if (ids != null) {
+        // to do this, we add the ids to the working queue, then process the queue
+        LinkedList<Integer> q = new LinkedList<Integer>();
+        q.addAll(ids);
+        while (q.peek() != null) {
+          Integer id = q.remove();
+          Annotation a = set.get(id);
+          if (!ret.contains(a)) {
+            ret.add(a);
+            ids = getToEdges(edgeName, a);
+            if (ids != null) {
+              q.addAll(ids);
+            }
+          }
+        }
+      } // if ids != null
+    } // for
+    return ret;    
   }
   
   /**
@@ -455,6 +503,7 @@ public class AnnotationGraph
    */
   public FeatureMap getFeatureMapCopy(Annotation ann) {
     ensureActive();
+    ensureAnnotation(ann);
     FeatureMap ret = Utils.toFeatureMap(ann.getFeatures());
     for(String edge : edgeSet) {
       ret.remove(toEdgeNames.get(edge));
@@ -478,19 +527,31 @@ public class AnnotationGraph
    * then the transitive set of those annotations will be copied separately. In order to prevent
    * multiple copies, the which collection should contain exactly the one annotation for each 
    * transitive set that creates the maximal transitive set that one wants to copy. 
+   * If no edgeNames are specified, the set of all transitive annotations for all known edge
+   * names is copied, otherwise only those for the given edge names.
+   * If which is null, then all annotations from the ag1-set will get copied. If which is empty,
+   * no annotations will get copied.
+   * <p>
+   * The annotation set for the ag2 AnnotationGraph must be mutable for this to work.
    * @param ag1
    * @param ag2
    * @param which 
    */
-  public void copyAnnotations(AnnotationGraph ag1, AnnotationGraph ag2, Collection<Annotation> which) {
+  public void copyAnnotations(AnnotationGraph ag1, AnnotationGraph ag2, 
+          Collection<Annotation> which, String... edgeNames) {
     // TODO!!
   }
+  /**
+   * Move annotations.
+   * 
+   * <p>
+   * The annotation set for the ag2 AnnotationGraph must be mutable for this to work.
+   */
+  public void moveAnnotations(AnnotationGraph ag1, AnnotationGraph ag2,
+          Collection<Annotation> which, String... edgeNames) {
+    
+  }
   
-  
-  
-  // TODO: methods to maybe add:
-  // getAnnotationsIterator(edgeName,ann)
-  // getReferencingAnnotationsIterator(edgeName,ann)
   
   
   //////////////////////////////
@@ -513,6 +574,11 @@ public class AnnotationGraph
     }
   }
   
+  protected void ensureAnnotation(Annotation ann) {
+    if(!set.contains(ann)) {
+      throw new GateRuntimeException("Annotation is not from the set for this AnnotationGraph");
+    }
+  }
   
   /**
    * Get the list of ids of annotations this annotation points to or null.

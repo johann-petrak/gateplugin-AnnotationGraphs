@@ -77,8 +77,8 @@ public class Test1 {
     
     Document d = Factory.newDocument(new String(new char[10]).replace('\0', ' '));
     
-    AnnotationGraph ag = AnnotationGraph.getAnnotationGraph(d, "");    
-    AnnotationSet set = d.getAnnotations("");
+    AnnotationGraph ag = AnnotationGraph.getAnnotationGraph(d, d.getAnnotations("Set1"));    
+    AnnotationSet set = d.getAnnotations("Set1");
     
     ag.addEdgeName("m");
     
