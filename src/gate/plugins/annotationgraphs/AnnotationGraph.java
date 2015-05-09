@@ -3,6 +3,7 @@ package gate.plugins.annotationgraphs;
 import gate.Annotation;
 import gate.AnnotationSet;
 import gate.Document;
+import gate.Factory;
 import gate.FeatureMap;
 import gate.Resource;
 import gate.Utils;
@@ -58,6 +59,8 @@ public class AnnotationGraph
     if(edgeList != null) {
       edgeSet.addAll(edgeList);
     }
+    toEdgeNames = new HashMap<String,String>();
+    fromEdgeNames = new HashMap<String,String>();
     for(String edgeName : edgeSet) {
       toEdgeNames.put(edgeName,AG_FNS_PREFIX+".to."+edgeName);
       fromEdgeNames.put(edgeName,AG_FNS_PREFIX+".from."+edgeName);
@@ -65,9 +68,11 @@ public class AnnotationGraph
     defaultName = (String)doc.getFeatures().get(AG_DFN_DEFEDGE);
     // Make it easier to check if the default name is set by letting it never be empty, but
     // either null or a valid name.
-    if(defaultName.isEmpty()) {
+    if(defaultName != null && defaultName.isEmpty()) {
       defaultName = null;
     }
+    set.addAnnotationSetListener(this);
+    Factory.addCreoleListener(this);
     isActive = true;
   }
   
@@ -134,7 +139,7 @@ public class AnnotationGraph
     ensureActive();
     List<Integer> ids = getToEdgesList(edgeName, from);
     ids.add(to.getId());
-    ids = getFromEdgesList(edgeName,from);
+    ids = getFromEdgesList(edgeName,to);
     ids.add(from.getId());
   }
   
@@ -162,11 +167,13 @@ public class AnnotationGraph
     if(!done) {
       throw new GateRuntimeException("Attempt to remove a non-existing to edge between annotations "+from+" and "+to);
     }
-    ids = getFromEdgesList(edgeName,from);
+    removeEmptyToEdgeList(edgeName, from);
+    ids = getFromEdgesList(edgeName,to);
     done = ids.remove(from.getId());    
     if(!done) {
       throw new GateRuntimeException("Attempt to remove a non-existing from edge between annotations "+from+" and "+to);
     }
+    removeEmptyFromEdgeList(edgeName, to);
   }
   
   public void removeEdge(Annotation from, Annotation to) {
@@ -234,7 +241,9 @@ public class AnnotationGraph
         if(!done) {
           throw new GateRuntimeException("Unexpected inconsistency!");
         }
+        removeEmptyFromEdgeList(edgeName, tmp);
       }
+      removeEmptyToEdgeList(edgeName, ann);
     }
   }
   
@@ -474,7 +483,7 @@ public class AnnotationGraph
    * @param which 
    */
   public void copyAnnotations(AnnotationGraph ag1, AnnotationGraph ag2, Collection<Annotation> which) {
-    
+    // TODO!!
   }
   
   
@@ -551,6 +560,21 @@ public class AnnotationGraph
     return ret;
   }
   
+  protected void removeEmptyToEdgeList(String edgeName, Annotation ann) {
+    FeatureMap fm = ann.getFeatures();
+    List<Integer> l = (List<Integer>)fm.get(toEdgeNames.get(edgeName));
+    if(l != null && l.isEmpty()) {
+      fm.remove(toEdgeNames.get(edgeName));
+    }
+  }
+  protected void removeEmptyFromEdgeList(String edgeName, Annotation ann) {
+    FeatureMap fm = ann.getFeatures();
+    List<Integer> l = (List<Integer>)fm.get(fromEdgeNames.get(edgeName));
+    if(l != null && l.isEmpty()) {
+      fm.remove(fromEdgeNames.get(edgeName));
+    }
+  }
+  
   protected void ensureActive() {
     if(!isActive) {
       throw new GateRuntimeException("Attempt to use AnnotationGraph for document "+docName+
@@ -578,6 +602,7 @@ public class AnnotationGraph
     // edges for any of the known edges. If yes, the edge information in all the 
     // connected annotations is updated accordingly
     Annotation ann = ase.getAnnotation();
+    System.err.println("DEBUG annotationRemoved for "+ann);
     Integer thisId = ann.getId();
     for(String edgeName : edgeSet) {
       // check the outgoing edges: for each outgoign edge, remove 
@@ -585,9 +610,11 @@ public class AnnotationGraph
       List<Integer> ids = getToEdges(edgeName, ann);
       if(ids != null) {
         for(Integer otherId : ids) {
-          List<Integer> otherIds = getFromEdges(edgeName,set.get(otherId));
+          Annotation a = set.get(otherId);
+          List<Integer> otherIds = getFromEdges(edgeName,a);
           if(otherIds != null) {
             otherIds.remove(thisId);
+            removeEmptyFromEdgeList(edgeName,a);
           }
         }
       }
@@ -596,9 +623,11 @@ public class AnnotationGraph
       ids = getFromEdges(edgeName, ann);
       if(ids != null) {
         for(Integer otherId : ids) {
-          List<Integer> otherIds = getToEdges(edgeName,set.get(otherId));
+          Annotation a = set.get(otherId);
+          List<Integer> otherIds = getToEdges(edgeName,a);
           if(otherIds != null) {
             otherIds.remove(thisId);
+            removeEmptyToEdgeList(edgeName,a);
           }
         }
       }

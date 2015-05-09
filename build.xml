@@ -18,6 +18,8 @@
   <property name="gate.jar" location="${gate.home}/bin/gate.jar" />
   <property name="gate.lib" location="${gate.home}/lib" />
 
+  <property name="testsout.dir" location="testsout" />
+
   <path id="compile.classpath">
     <pathelement location="${gate.jar}" />
     <!--
@@ -87,10 +89,10 @@
   </target> 
 
   <target name="dist" depends="jar,javadoc" />
- 
-  <target name="tests" depends="jar,test1"/> 
 
-  <target name="test1" depends="jar">
+  <target name="test"  depends="tests" /> 
+  <target name="tests" depends="jar"> 
+    <mkdir dir="${testsout.dir}" />
     <junit fork="true" showoutput="yes" printsummary="yes">
       <classpath>
         <pathelement location="${jar.location}" />
@@ -98,13 +100,13 @@
       </classpath>
       <sysproperty key="java.awt.headless" value="true" />
       <formatter type="xml" />
-      <test name="gate.plugins.annotationgraphs.tests.Tests1" />
+      <test name="gate.plugins.annotationgraphs.tests.TestAll" outfile="junittests" todir="${testsout.dir}" />
     </junit>
     <junitreport>
-      <fileset dir=".">
+      <fileset dir="${testsout.dir}">
         <include name="TEST-*.xml" />
       </fileset>
-      <report todir="." format="noframes" />
+      <report todir="${testsout.dir}" format="noframes" />
     </junitreport>
   </target>
 
@@ -113,7 +115,6 @@
   -->
   <target name="all" depends="dist" />
   <target name="build" depends="jar" />
-  <target name="test" />
   <target name="distro.prepare" depends="clean.classes" />
 </project>
 
