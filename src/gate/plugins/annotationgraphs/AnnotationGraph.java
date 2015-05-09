@@ -5,6 +5,7 @@ import gate.AnnotationSet;
 import gate.Document;
 import gate.FeatureMap;
 import gate.Resource;
+import gate.Utils;
 import gate.annotation.AnnotationSetImpl;
 import gate.event.AnnotationSetEvent;
 import gate.event.AnnotationSetListener;
@@ -19,6 +20,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
 
@@ -119,6 +121,13 @@ public class AnnotationGraph
   public Collection<String> getEdgeNames() {
     return Collections.unmodifiableCollection(edgeSet);
   }
+  
+    
+  public void close() {
+    deActivate();
+  }
+  
+
   
   
   public void addEdge(String edgeName, Annotation from, Annotation to) {
@@ -384,6 +393,29 @@ public class AnnotationGraph
   }
   
   
+  public AnnotationSet getTransitiveAnnotationSet(String edgeName, Annotation ann) {
+    ensureActive();
+    AnnotationSet ret = new AnnotationSetImpl(doc);
+    List<Integer> ids = getToEdges(edgeName, ann);
+    if(ids != null) {
+      // to do this, we add the ids to the working queue, then process the queue
+      LinkedList<Integer> q = new LinkedList<Integer>();
+      q.addAll(ids);
+      while(q.peek() != null) {
+        Integer id = q.remove();
+        Annotation a = set.get(id);
+        if(!ret.contains(a)) {
+          ret.add(a);
+          ids = getToEdges(edgeName, a);
+          if(ids != null) {
+            q.addAll(ids);
+          }
+        }
+      }
+    }
+    return ret;
+  }
+  
   /**
    * Set the default edge name to subsequently use. 
    * If set to null or the empty string, the default name is cleared and the methods which 
@@ -404,12 +436,48 @@ public class AnnotationGraph
   }
   
   
-  
-  
-  
-  public void close() {
-    deActivate();
+  /// METHODS TO HANDLE ANNOTATIONS, FEATURE MAPS etc. but not EDGES
+
+  /**
+   * Get a copy of the annotation's feature map, with all edge information removed.
+   * This is a shallow copy, only the feature map object is copied.
+   * @param ann
+   * @return 
+   */
+  public FeatureMap getFeatureMapCopy(Annotation ann) {
+    ensureActive();
+    FeatureMap ret = Utils.toFeatureMap(ann.getFeatures());
+    for(String edge : edgeSet) {
+      ret.remove(toEdgeNames.get(edge));
+      ret.remove(fromEdgeNames.get(edge));
+    }
+    return ret;
   }
+  
+  
+  ///// STATIC METHODS THAT HANDLE MORE THAN ONE ANNOTATION GRAPH
+  
+  /**
+   * Copy all annotations included in the which set from the first annotation graph to the second 
+   * annotation graph. 
+   * This will copy all annotations from the given collection which from ag1 to ag2. All annotations
+   * in which must come from the set associated with ag1. This will copy the annotation type, offsets,
+   * and will create a shallow copy of the feature map. All annotations pointed to by an annotation
+   * are recursively also copied in the same fashion. In other words, for each annotation in the
+   * which set, the transitiveAnnotationSet is first created and then copied to the target set. 
+   * If the which set contains annotations which are part of the transitive set of another annotation,
+   * then the transitive set of those annotations will be copied separately. In order to prevent
+   * multiple copies, the which collection should contain exactly the one annotation for each 
+   * transitive set that creates the maximal transitive set that one wants to copy. 
+   * @param ag1
+   * @param ag2
+   * @param which 
+   */
+  public void copyAnnotations(AnnotationGraph ag1, AnnotationGraph ag2, Collection<Annotation> which) {
+    
+  }
+  
+  
   
   // TODO: methods to maybe add:
   // getAnnotationsIterator(edgeName,ann)
@@ -510,7 +578,31 @@ public class AnnotationGraph
     // edges for any of the known edges. If yes, the edge information in all the 
     // connected annotations is updated accordingly
     Annotation ann = ase.getAnnotation();
-    // TODO
+    Integer thisId = ann.getId();
+    for(String edgeName : edgeSet) {
+      // check the outgoing edges: for each outgoign edge, remove 
+      // this annotation id from the other annotation's from list
+      List<Integer> ids = getToEdges(edgeName, ann);
+      if(ids != null) {
+        for(Integer otherId : ids) {
+          List<Integer> otherIds = getFromEdges(edgeName,set.get(otherId));
+          if(otherIds != null) {
+            otherIds.remove(thisId);
+          }
+        }
+      }
+      // check the incoming edges: for each incoming edge, remove
+      // this annotation id from the other annotation's to list
+      ids = getFromEdges(edgeName, ann);
+      if(ids != null) {
+        for(Integer otherId : ids) {
+          List<Integer> otherIds = getToEdges(edgeName,set.get(otherId));
+          if(otherIds != null) {
+            otherIds.remove(thisId);
+          }
+        }
+      }
+    }
   }
 
   @Override

@@ -88,6 +88,17 @@ be supported.
 RelationSet.getReferencing(id): same as getReferencingAnnotations(ann)
 RelationSet.getRelations(int... members): ????
 
+Impact on handling annotations
+==============================
+
+If an annotation from our set gets removed, then we make an attempt to remove it from all
+other annotations that may refer to it.
+
+A client should be aware of the following:
+
+*) when copying a feature map, make sure to use ag.FeatureMapCopy(Annotation) which will
+return a copy of the original feature map with all edge features removed.
+
 NOTE: equivalent implementation of LodieUtils methods
 ===================================================== 
 
