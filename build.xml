@@ -20,10 +20,12 @@
 
   <path id="compile.classpath">
     <pathelement location="${gate.jar}" />
+    <!--
     <fileset dir="lib">
      <include name="**/*.jar" />
       <include name="**/*.zip" />
     </fileset>
+    -->
     <fileset dir="${gate.lib}" >
       <include name="**/*.jar" />
       <include name="**/*.zip" />

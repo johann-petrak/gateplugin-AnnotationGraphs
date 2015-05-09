@@ -1,0 +1,83 @@
+General approach:
+=================
+
+An annotation can be connected to other annotations by any number of directed links.
+Links are grouped by "edge names". For example annotation A could link to annotations
+B,C,D via edge "members" and could linkd to annotation E via edge "type". 
+All links get represented as ordered lists of integers representing annotation ids. 
+
+It is possible to store arbitrary properies for each edge name.
+
+It is possible to store arbitrary properties for each actual edge.
+
+Usage should be:
+================
+
+AnnotationGraph ag = AnnotationGraph.getAnnotationGraph(doc,setname);
+
+After this, most actions must go through the ag object! 
+
+Several classes of actions:
+===========================
+
+1) "global", which define the global properties of the graph. For now this is simply the set of edge names and for 
+each edge name, a set of properties. Some of the properties may actually be stored implicitly (see below).
+
+For now, all global information about names of edges etc. is stored in document features whose names
+start with "_ag".
+
+ag.addEdgeName("members");
+  This adds the name "members" to the set of known edge names. 
+  Internally, this creates the actual keys used to store edge information in he feature set for this 
+  edge name:
+    - _ag.to.members: for ids of annotations we are pointing to 
+    - _ag.from.members: for ids of annotations that point to us
+
+ag.removeEdgeName("members"); 
+  // SLOW/INEFFICIENT operation!
+  // NOTE: to make it less inefficient, make sure that you use a separate annotation set just for
+  // the graph. 
+  This should remove the edge name from the global information, but will also remove
+  all edges from all annotations. 
+  Internally this first iterates over all annotations in the annotation set and calls
+    ag.removeAllEdges(ann) // internally does ag.removeAllToEdges(ann) and ag.removeAllFromEdges(ann)
+  then it removes all information about the edge from the global information.  
+
+2) Edge oriented 
+
+ag.addEdge(fromAnn,toAnn,edgename) 
+ag.removeEdge(fromAnn,toAnn,edgename)
+ag.hasEdge(fromAnn,toAnn,edgename)
+
+ag.addBothEdges(ann1,ann2,edgename)
+
+List<Annotation> anns = ag.getAnnotations(fromAnn,edgename); // edges pointing from fromAnn to other anns
+List<Annotation> anns = ag.getReferencingAnnotations(toAnn,edgename);  // edges pointing from other anns to toAnn
+
+List<FeatureMap> fms = ag.getFeatureMaps(fromAnn,edgename);
+List<FeatureMap> fms = ag.getReferencingFeatureMaps(toAnn,edgename);
+
+Iterator<Annotation> annIt = ag.getAnnotationsIterator(fromAnn,edgename); 
+Iterator<Annotation> annIt = ag.getReferencingAnnotationsIterator(toAnn,edgename); 
+
+ag.sortEdges(fromAnn,edgename,Comparator<Annotation>)
+ag.sortEdges(fromAnn,edgename,Comparator<FeatureMap>)
+
+
+NOTE: equivalent implementation of LodieUtils methods
+===================================================== 
+
+int keepCandidatesByCollection(Collection<FeatureMap> orig, Collection<FeatureMap> keep, String... features)
+-> this works just on lists of FeatureMaps and will remain part of LodieUtils
+
+int keepCandidateAnnsByCollection(AnnotationSet from, Annotation ll, CollectionFeatureMap> filter, String... features)
+
+This removes the edges which do not match any candidate in the filter map. This method should stay in LodieUtils
+but will get replaced by code similar to this:
+  for(Annotation member : ag.getToAnnotationsIterator(llAnn,edgename)) {
+    if(!hasMatchingCandidate(filter, member.getFeatures(), features)) {
+      ag.removeEdge(llAnn,member,edgename); // CONCURRENT MODIFICATION??
+    }
+  }
+
+
