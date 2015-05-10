@@ -100,7 +100,7 @@
       </classpath>
       <sysproperty key="java.awt.headless" value="true" />
       <formatter type="xml" />
-      <test name="gate.plugins.annotationgraphs.tests.TestAll" outfile="junittests" todir="${testsout.dir}" />
+      <test name="gate.plugins.annotationgraphs.tests.TestAll" outfile="TEST-All" todir="${testsout.dir}" />
     </junit>
     <junitreport>
       <fileset dir="${testsout.dir}">
