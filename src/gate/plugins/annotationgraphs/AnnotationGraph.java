@@ -18,12 +18,14 @@ import gate.util.GateRuntimeException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Predicate;
 
 public class AnnotationGraph 
   implements AnnotationSetListener, DocumentListener, CreoleListener 
@@ -102,6 +104,14 @@ public class AnnotationGraph
       edgeList.add(name);
       doc.getFeatures().put(AG_DFN_EDGES, edgeList);
     }
+  }
+  
+  public void addEdgeNames(Collection<String> names) {
+    for(String name : names) { addEdgeName(name); }
+  }
+  
+  public void addEdgeNames(String... names) {
+    for(String name : names) { addEdgeName(name); }
   }
   
   public void removeEdgeName(String name) {
@@ -480,6 +490,7 @@ public class AnnotationGraph
    * @param name 
    */
   public void setDefaultEdgeName(String name) {
+    ensureActive();
     if(name == null || name.isEmpty()) {
       defaultName = null;      
     } else {
@@ -491,6 +502,69 @@ public class AnnotationGraph
     }
     doc.getFeatures().put(AG_DFN_DEFEDGE, name);    
   }
+  
+  
+  public int getEdgeSize(String edgeName, Annotation ann) {
+    ensureActive();
+    ensureAnnotation(ann);
+    List<Integer> ids = getToEdges(edgeName,ann);
+    if(ids == null) { return 0; }
+    return ids.size();
+  }
+  
+  public int getEdgeSize(Annotation ann) {
+    ensureDefaultEdge();
+    return getEdgeSize(defaultName, ann);
+  }
+  
+  //////////////////////////////////////////////////////////////
+  /// IN-PLACE MODIFICATION of EDGE LISTS
+  //////////////////////////////////////////////////////////////
+  
+  /**
+   * Filter edges and keep those for which the filter returns true.
+   * @param edgeName
+   * @param ann
+   * @param filter 
+   */
+  public void grepEdges(String edgeName, Annotation ann, Predicate<Annotation> filter) {
+    ensureActive();
+    ensureAnnotation(ann);
+    List<Integer> ids = getToEdges(edgeName, ann);
+    if(ids != null) {
+      Iterator<Integer> it = ids.iterator();
+      while(it.hasNext()) {
+        Integer id = it.next();
+        Annotation tmp = set.get(id);
+        if(!filter.test(tmp)) {
+          List<Integer> otherIds = getFromEdges(edgeName,tmp);
+          otherIds.remove(tmp.getId());
+          it.remove();
+        }
+      }
+    }
+  }
+  
+  /**
+   * Sort the edges list according to the comparator.
+   * If there are no edges or just one edge, this does nothing. Otherwise,
+   * the edge list is sorted according to the sorter instance.
+   * @param edgeName
+   * @param ann
+   * @param sorter 
+   */
+  public void sortEdges(String edgeName, Annotation ann, Comparator<Annotation> sorter) {
+    ensureActive();
+    ensureAnnotation(ann);
+    List<Integer> ids = getToEdges(edgeName, ann);
+    if(ids != null) {
+      // create a new comparator from the given one and use that for the sorting
+      ByIdComparator comp = new ByIdComparator(set, sorter);
+      ids.sort(comp);
+    }    
+  }
+
+  
   
   
   /// METHODS TO HANDLE ANNOTATIONS, FEATURE MAPS etc. but not EDGES
@@ -511,6 +585,7 @@ public class AnnotationGraph
     }
     return ret;
   }
+  
   
   
   ///// STATIC METHODS THAT HANDLE MORE THAN ONE ANNOTATION GRAPH
@@ -549,9 +624,126 @@ public class AnnotationGraph
    */
   public void moveAnnotations(AnnotationGraph ag1, AnnotationGraph ag2,
           Collection<Annotation> which, String... edgeNames) {
-    
+    /// TODO!!
   }
   
+  //////////////////////////////////////////////////////////////////////////
+  /// HIGH-LEVEL UTILITY METHODS
+  ///////////////////////////////////////////////////////////////////////////
+  
+  /**
+   * Return a list of annotations pointing to coextensive annotations.
+   * This returns a list, ordered by increasing document offset of annotations of type "type",
+   * where each annotation has edges "edgeName" point to all the annotations from subSet which
+   * have the same range. The parameter min allows to limit the creation of ranges to those
+   * situations where at least that many annotations are coextensive.
+   * <p>
+   * IMPORTANT: this requires that the original set for the AnnotationGraph is mutable and 
+   * the range annotation will get added to this set! (This is necessary because all annotations
+   * for which edges are created must be in the set for the AnnotationGraph)
+   * @param subSet
+   * @param type
+   * @return 
+   */
+  public List<Annotation> getCoextensiveRangeAnnotations(String edgeName, AnnotationSet subSet, String type, int min) {
+    ensureActive();
+    // not sure what the most efficient way to find all clusters of coextensive annotations really
+    // is, and it probably depends on if there are many ranges or ranges with lots of coextensive
+    // annotations. This algorithms tries to also work well with the latter.
+    AnnotationSetImpl ranges = new AnnotationSetImpl(doc);
+    HashSet<Annotation> seen = new HashSet<Annotation>();
+    // store the annotations in a separate collection: if we use subSet directly and it
+    // is the same set as the one to which we add the new annotations we would get a 
+    // concurrent modification exception!
+    List<Annotation> tmpList = new ArrayList<Annotation>();
+    tmpList.addAll(subSet);
+    for(Annotation ann : tmpList) {
+      if(seen.contains(ann)) { continue; }
+      seen.add(ann);
+      ensureAnnotation(ann);
+      AnnotationSet coexts = Utils.getCoextensiveAnnotations(subSet, ann);
+      seen.addAll(coexts);
+      if(coexts.size() >= min) {
+        Annotation range = set.get(Utils.addAnn(set, ann, type, Utils.featureMap()));
+        ranges.add(range);
+        for(Annotation toAnn : coexts) {
+          this.addEdge(edgeName, range, toAnn);
+        }
+      }
+    }
+    return ranges.inDocumentOrder();
+  }
+  
+  // TODO: getCoextensiveRangeAnnotationSet: same but the return type is AnnotationSet ?
+  
+  /**
+   * Add edges linking to each of the annotations in the collection, in order.
+   * This creates edges in the annotation ann, linking ann to each annotation in anns.
+   * If Collection<Annotation> is a List, then the order of the edges will be the same 
+   * as the order of annotations in the List, if it is an AnnotationSet the edges will be
+   * in order of increasing start offset, and otherwise the order will be in whatever order
+   * an iterator of the collection returns the annotations.
+   * @param edgeName
+   * @param anns
+   * @return 
+   */
+  public void addSequenceEdges(String edgeName, Annotation ann, Collection<Annotation> anns) {
+    ensureActive();
+    ensureAnnotation(ann);
+    List<Integer> ids = getToEdgesList(edgeName, ann);
+    Collection<Annotation> use = anns;
+    if(anns instanceof AnnotationSet) {
+      use = ((AnnotationSet)anns).inDocumentOrder();
+    }
+    Iterator<Annotation> it = use.iterator();
+    while(it.hasNext()) {
+      Annotation tmp = it.next();
+      ensureAnnotation(tmp);
+      this.addEdge(edgeName, ann, tmp);
+    }
+  }
+  
+  /**
+   * Establish edges from each annotation to the next and previous.
+   * If the anns collection is a list, use the order of the list, if 
+   * it is an AnnotationSet, use document order, otherwise use whatever
+   * order an iterator imposes on the collection (may be random). 
+   * This creates edges between each annotation in the sequence and its successor using 
+   * the successorEdgeName and each annotation in the sequence and its predecessor, using
+   * the predecessorEdgeName. If an edgeName is null, it will not be used, but at least one
+   * of the two edge names must be non-null.
+   * @param edgeName
+   * @param anns 
+   */
+  public void makeSequence(String predecessorEdgeName, String successorEdgeName, Collection<Annotation> anns) {
+    ensureActive();
+    if(predecessorEdgeName == null && successorEdgeName == null) {
+      throw new GateRuntimeException("Predecessor and successor edge names cannot be both null!");
+    }
+    if (anns.size() > 1) {
+      Collection<Annotation> use = anns;
+      if (anns instanceof AnnotationSet) {
+        use = ((AnnotationSet) anns).inDocumentOrder();
+      }
+      Annotation prevAnn;
+      Annotation thisAnn;
+      Iterator<Annotation> it = use.iterator();
+      thisAnn = it.next();
+      ensureAnnotation(thisAnn);
+      while (it.hasNext()) {
+        prevAnn = thisAnn;
+        thisAnn = it.next();
+        ensureAnnotation(thisAnn);
+        // if wanted, create a link from prev to this
+        if (successorEdgeName != null) {
+          this.addEdge(successorEdgeName, prevAnn, thisAnn);
+        }
+        if (predecessorEdgeName != null) {
+          this.addEdge(predecessorEdgeName, thisAnn, prevAnn);
+        }
+      }
+    }
+  }
   
   
   //////////////////////////////
@@ -576,7 +768,7 @@ public class AnnotationGraph
   
   protected void ensureAnnotation(Annotation ann) {
     if(!set.contains(ann)) {
-      throw new GateRuntimeException("Annotation is not from the set for this AnnotationGraph");
+      throw new GateRuntimeException("Annotation is not from the set for this AnnotationGraph: "+ann);
     }
   }
   
@@ -657,6 +849,37 @@ public class AnnotationGraph
     fromEdgeNames = null;
   }
 
+  ////////////////////////////////////////////////////////////////////////
+  /// INTERNAL CLASSES
+  ///////////////////////////////////////////////////////////////////////
+  
+  protected static class ByIdComparator 
+          implements Comparator<Integer> {
+
+    protected Comparator<Annotation> comparator;
+    protected AnnotationSet set;
+    public ByIdComparator(AnnotationSet set, Comparator<Annotation> outer) {
+      this.set = set;
+      this.comparator = outer;
+    }
+    
+    @Override
+    public int compare(Integer o1, Integer o2) {
+      return comparator.compare(set.get(o1), set.get(o2));
+    }
+  
+  }
+  
+  
+  
+  
+  
+  //////////////////////////////////////////////////////////////////////////
+  //// LISTENERS
+  /////////////////////////////////////////////////////////////////////////
+  
+  
+  
   @Override
   public void annotationAdded(AnnotationSetEvent ase) {
     // do nothinig, we do not care about added annotations

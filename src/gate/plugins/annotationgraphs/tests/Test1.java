@@ -13,12 +13,15 @@ import gate.Factory;
 import gate.FeatureMap;
 import gate.Gate;
 import gate.Utils;
+import gate.annotation.AnnotationSetImpl;
 import gate.creole.ResourceInstantiationException;
 import gate.plugins.annotationgraphs.AnnotationGraph;
 import gate.util.GateException;
 import java.io.File;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
+import java.util.Comparator;
+import java.util.List;
 import org.apache.log4j.ConsoleAppender;
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
@@ -28,6 +31,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import org.junit.Before;
 import org.junit.Test;
+import java.util.function.Predicate;
 
 /**
  *
@@ -99,6 +103,8 @@ public class Test1 {
     assertTrue(ag.hasEdge("m", l1, m2));
     assertTrue(!ag.hasEdge("m", m1, m2));
     
+    assertEquals(3,ag.getEdgeSize("m",l1));
+    
     Annotation r1 = ann(set,3,5,"R1",Utils.featureMap());
     ag.addEdge("m",r1,l1);
     
@@ -116,7 +122,95 @@ public class Test1 {
     
     ag.getAnnotationSet("m",r1);
     
-    System.err.println("Document is "+d);
+    
+    int s = ag.getEdgeSize("m", l1);
+    assertEquals(1,s);
+       
+    // TODO: GATE the old grandma does not allow us to do that, do'h
+    // ag.filterEdges("m", l1, a -> a.getType().equals("M1"));
+    
+    ag.grepEdges("m",l1,new Predicate<Annotation>(){ 
+      @Override
+      public boolean test(Annotation ann) { 
+        // remove M1, if it exists (but it doesnt!)
+        return !ann.getType().equals("M1");
+      }
+    } );
+    assertEquals(1,ag.getEdgeSize("m",l1));
+    ag.grepEdges("m",l1,new Predicate<Annotation>(){ 
+      @Override
+      public boolean test(Annotation ann) { 
+        // do not keep M2, if it exists!
+        return !ann.getType().equals("M2");
+      }
+    } );
+    // Grandma ...
+    // ag.filterEdges("m", l1, a -> a.getType().equals("M2"));
+    assertEquals(0,ag.getEdgeSize("m",l1));
+    
+    Annotation t4 = ann(set,1,2,"T1",Utils.featureMap());
+    Annotation t3 = ann(set,2,3,"T2",Utils.featureMap());
+    Annotation t2 = ann(set,3,4,"T3",Utils.featureMap());
+    Annotation t1 = ann(set,4,5,"T4",Utils.featureMap());
+    
+    // Check if creating a chain in document order works
+    AnnotationSetImpl tmpSet = new AnnotationSetImpl(set.getDocument());
+    tmpSet.add(t1);
+    tmpSet.add(t3);
+    tmpSet.add(t4);
+    tmpSet.add(t2);
+    ag.addEdgeName("next");
+    ag.addEdgeName("previous");
+    ag.makeSequence("previous", "next", tmpSet);
+    
+    assertEquals(1,ag.getAnnotations("next",t4).size());
+    assertEquals("T2",ag.getAnnotations("next",t4).get(0).getType());
+    assertEquals(0,ag.getAnnotations("previous",t4).size());
+    
+    assertEquals(0,ag.getAnnotations("next",t1).size());
+    assertEquals(1,ag.getAnnotations("previous",t1).size());
+    assertEquals("T3",ag.getAnnotations("previous",t1).get(0).getType());
+    
+    ag.addSequenceEdges("m", l1, tmpSet);
+    
+    assertEquals("T1",ag.getAnnotations("m",l1).get(0).getType());
+    
+    // sort the sequence edges by descending offset
+    ag.sortEdges("m", l1, new Comparator<Annotation>() { 
+      @Override
+      public int compare(Annotation o1, Annotation o2) {
+        return o2.getStartNode().getOffset().compareTo(o1.getStartNode().getOffset());
+      }
+    });
+    assertEquals("T4",ag.getAnnotations("m",l1).get(0).getType());
+
+    
+    
+    // create 10 Cn annotation, of which 5 (2 and 3) are coextensive with at least one other
+    ann(set,0,1,"CX",Utils.featureMap("id","C1"));
+    ann(set,1,2,"CX",Utils.featureMap("id","C2"));
+    ann(set,3,4,"CX",Utils.featureMap("id","C3"));
+    ann(set,3,4,"CX",Utils.featureMap("id","C4"));
+    ann(set,5,6,"CX",Utils.featureMap("id","C5"));
+    ann(set,6,7,"CX",Utils.featureMap("id","C6"));
+    ann(set,7,8,"CX",Utils.featureMap("id","C7"));
+    ann(set,7,8,"CX",Utils.featureMap("id","C8"));
+    ann(set,7,8,"CX",Utils.featureMap("id","C9"));
+    ann(set,9,10,"CX",Utils.featureMap("id","C10"));
+    // So we should get C3+C4 and C7+C8+C9 (in document order)
+    AnnotationSet forCoexts = set.get("CX");
+    ag.addEdgeName("coext");
+    List<Annotation> coexts = ag.getCoextensiveRangeAnnotations("coext", forCoexts, "COEXT", 2);
+    assertEquals(2,coexts.size());
+    ag.setDefaultEdgeName("coext");
+    assertEquals(2,ag.getAnnotations(coexts.get(0)).size());
+    assertEquals(3,ag.getAnnotations(coexts.get(1)).size());
+    
+    //System.err.println("Set is "+set);
+
+    ag.addEdgeName("n");
+    ag.setDefaultEdgeName("n");
+    
   }
   
   private static Annotation ann(AnnotationSet set, int from, int to, String type, FeatureMap fm) {
