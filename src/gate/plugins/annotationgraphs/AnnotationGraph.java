@@ -676,6 +676,128 @@ public class AnnotationGraph
   
   // TODO: getCoextensiveRangeAnnotationSet: same but the return type is AnnotationSet ?
   
+  
+  /**
+   * Return a list of annotations pointing to mutually overlapping annotations.
+   * This returns a list, ordered by increasing starting offset, of annotations of type "type",
+   * where each annotation has edges "edgeName" point to all the annotations from subSet which
+   * are mutually overlapping. The parameter min allows to limit the creation of ranges to those
+   * situations where at least that many annotations are pointed to.
+   * The sets of annotations for each generated range annotation are constructed such that the 
+   * following holds: any two annotations in the set overlap and for two different sets, it is 
+   * always true that one is not a subset or equal to the other. 
+   * <p>
+   * NOTE: this probably does not ensure that all clusters are found! It only ensures that
+   * if a cluster is found, then all annotations in the cluster are mutually overlapping and 
+   * that each annotation is member of at least one cluster. Their could be additional clusters
+   * that are not found which may even be larger than any of the clusters we find!
+   * <p>
+   * IMPORTANT: this requires that the original set for the AnnotationGraph is mutable and 
+   * the range annotation will get added to this set! (This is necessary because all annotations
+   * for which edges are created must be in the set for the AnnotationGraph)
+   * @param subSet
+   * @param type
+   * @return 
+   */
+  public List<Annotation> getSequOverlappingRangeAnnotations(String edgeName, AnnotationSet set, String type, int min) {
+    // rough outline of the algorithm:
+    // For each annotation ann from left to right which has not yet been seen do the following
+    // = find all overlapping annotations (regardless of already seen or not)
+    // = put all overlapping annotations on the seen list
+    //   
+    HashSet<Annotation> seen = new HashSet<>();
+    List<Annotation> ranges = new ArrayList<>();
+    for(Annotation ann : set) {
+      if(seen.contains(ann)) { continue; }
+      long minoffset = Utils.start(ann);
+      long maxoffset = Utils.end(ann);
+      // the initial set of annotations overlapping with the seed ann
+      AnnotationSet overlappings = Utils.getOverlappingAnnotations(set,ann);
+      for(Annotation o : overlappings) {
+        seen.add(o);
+        long s = Utils.start(o);
+        long e = Utils.end(o);
+        if(s < minoffset) { minoffset = s; }
+        if(e > maxoffset) { maxoffset = e; }        
+      }
+      // now create the actual range annotation from the minimal and maximal offset of all 
+      // overlapping annotations
+      if(overlappings.size() > min) {
+        Annotation range = set.get(Utils.addAnn(set, minoffset, maxoffset, type, Utils.featureMap()));
+        ranges.add(range);
+        for(Annotation toAnn : overlappings) {
+          this.addEdge(edgeName, range, toAnn);
+        }
+      }
+    }
+    return ranges;
+  }
+  
+
+  /**
+   * Return a list of annotations pointing to sets of annotations where each annotation overlaps
+   * with at least one other annotation of the set. 
+   * @param edge
+   * @param set
+   * @param type
+   * @param min
+   * @return 
+   */
+  public List<Annotation> getMaxOverlappingRangeAnnotations(String edgeName, AnnotationSet set, String type, int min) {
+    // rough outline of the algorithm:
+    // For each annotation ann from left to right which has not yet been seen do the following
+    // = find all overlapping annotations (regardless of already seen or not)
+    // = put all overlapping annotations on the seen list
+    // = recursively add all annotations that overlap with any of the overlapping ones into the 
+    //   cluster and also on the seen list until no new annotations can be added.
+    //   
+    HashSet<Annotation> seen = new HashSet<>();
+    List<Annotation> ranges = new ArrayList<>();
+    for(Annotation ann : set) {
+      if(seen.contains(ann)) { continue; }
+      seen.add(ann);
+      // the final set of overlapping annotations
+      AnnotationSetImpl cluster = new AnnotationSetImpl(doc);
+      cluster.add(ann);
+      long minoffset = Utils.start(ann);
+      long maxoffset = Utils.end(ann);
+      // the initial set of annotations overlapping with the seed ann
+      AnnotationSet overlappings = Utils.getOverlappingAnnotations(set,ann);
+      cluster.addAll(overlappings);
+      // a queue of annotations still to expand ... 
+      LinkedList<Annotation> toProcess = new LinkedList<>();      
+      // add all annotations to the queue. This will include the one we are currently on,
+      // but since that one is already in seen, we wont expand it again.      
+      for(Annotation overlapping : toProcess) {
+        if(seen.contains(overlapping)) { continue; }
+        // now find the overlapping ones for that annotation
+        overlappings = Utils.getOverlappingAnnotations(set,overlapping);
+        // for each of the now overlapping ones, if we have not seen it, add it to the cluster
+        // and also schedule for recursive expansion
+        for(Annotation o : overlappings) {
+          if(!seen.contains(o)) {
+            toProcess.add(o); // for recursively finding more overlaps...
+            cluster.add(o);
+            long s = Utils.start(o);
+            long e = Utils.end(o);
+            if(s < minoffset) { minoffset = s; }
+            if(e > maxoffset) { maxoffset = e; }
+          }
+        }
+      }
+      // now create the actual range annotation from the minimal and maximal offset of all 
+      // overlapping annotations
+      if(cluster.size() > min) {
+        Annotation range = set.get(Utils.addAnn(set, minoffset, maxoffset, type, Utils.featureMap()));
+        ranges.add(range);
+        for(Annotation toAnn : cluster) {
+          this.addEdge(edgeName, range, toAnn);
+        }
+      }
+    }
+    return ranges;
+  }
+  
   /**
    * Add edges linking to each of the annotations in the collection, in order.
    * This creates edges in the annotation ann, linking ann to each annotation in anns.
